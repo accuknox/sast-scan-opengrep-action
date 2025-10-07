@@ -65,7 +65,4 @@ runs:
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          --accuknox-endpoint "$ACCUKNOX_ENDPOINT" \
-          --accuknox-token "$ACCUKNOX_TOKEN" \
-          --accuknox-label "$ACCUKNOX_LABEL" \
           --container-mode
