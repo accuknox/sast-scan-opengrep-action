@@ -1,6 +1,9 @@
 name: "AccuKnox SAST Scan"
-
 description: "Run AccuKnox SAST scan on the repository; results are automatically uploaded to CSPM panel."
+
+branding:
+  icon: "shield"
+  color: "purple"
 
 inputs:
   soft_fail:
