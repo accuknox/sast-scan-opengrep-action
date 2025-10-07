@@ -1,3 +1,72 @@
+# name: "AccuKnox SAST Scan"
+
+# description: "Run AccuKnox SAST scan on the repository; results are automatically uploaded to CSPM panel."
+
+# inputs:
+#   soft_fail:
+#     description: "Do not fail the pipeline if scan finds issues"
+#     required: false
+#     default: true
+#   pipeline_id:
+#     description: "Pipeline/Job ID to correlate with CI/CD runs"
+#     required: false
+#     default: ${{ github.run_id }}
+#   job_url:
+#     description: "URL for the current GitHub job"
+#     required: false
+#     default: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+#   ACCUKNOX_ENDPOINT:
+#     description: "CSPM panel endpoint URL"
+#     required: true
+#   ACCUKNOX_TOKEN:
+#     description: "Token for authenticating with CSPM panel"
+#     required: true
+#   ACCUKNOX_LABEL:
+#     description: "Label in AccuKnox SaaS for scan results"
+#     required: true
+
+# runs:
+#   using: "composite"
+#   steps:
+#     - name: Run AccuKnox SAST Scan
+#       shell: bash
+#       env:
+#         SOFT_FAIL: ${{ inputs.soft_fail }}
+#         PIPELINE_ID: ${{ inputs.pipeline_id }}
+#         JOB_URL: ${{ inputs.job_url }}
+#         ACCUKNOX_ENDPOINT: ${{ inputs.ACCUKNOX_ENDPOINT }}
+#         ACCUKNOX_TOKEN: ${{ inputs.ACCUKNOX_TOKEN }}
+#         ACCUKNOX_LABEL: ${{ inputs.ACCUKNOX_LABEL }}
+#       run: |
+#         # Validate required secrets
+#         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
+#           echo "ERROR: ACCUKNOX_ENDPOINT, ACCUKNOX_TOKEN, and ACCUKNOX_LABEL must be set!"
+#           exit 1
+#         fi
+
+#         # Download latest ASPM Scanner
+#         echo "Downloading AccuKnox ASPM Scanner..."
+#         curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.13.4/accuknox-aspm-scanner -o accuknox-aspm-scanner
+#         chmod +x accuknox-aspm-scanner
+
+#         # Determine soft-fail argument
+#         SOFT_FAIL_ARG=""
+#         SOFT_FAIL="${SOFT_FAIL//[$'\t\r\n ']}"  # clean whitespace
+#         if [ "$SOFT_FAIL" = "true" ]; then
+#           SOFT_FAIL_ARG="--softfail"
+#         fi
+
+#         # Run SAST scan (OpenGrep)
+#         echo "Running AccuKnox SAST scan..."
+#         ./accuknox-aspm-scanner scan $SOFT_FAIL_ARG sast \
+#           --command "." \
+#           --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
+#           --commit-ref "${GITHUB_REF#refs/heads/}" \
+#           --commit-sha "${GITHUB_SHA}" \
+#           --pipeline-id "$PIPELINE_ID" \
+#           --job-url "$JOB_URL" \
+#           --container-mode
+
 name: "AccuKnox SAST Scan"
 
 description: "Run AccuKnox SAST scan on the repository; results are automatically uploaded to CSPM panel."
@@ -24,6 +93,10 @@ inputs:
   ACCUKNOX_LABEL:
     description: "Label in AccuKnox SaaS for scan results"
     required: true
+  DEBUG:
+    description: "Enable debug mode"
+    required: false
+    default: true
 
 runs:
   using: "composite"
@@ -37,6 +110,7 @@ runs:
         ACCUKNOX_ENDPOINT: ${{ inputs.ACCUKNOX_ENDPOINT }}
         ACCUKNOX_TOKEN: ${{ inputs.ACCUKNOX_TOKEN }}
         ACCUKNOX_LABEL: ${{ inputs.ACCUKNOX_LABEL }}
+        DEBUG: ${{ inputs.DEBUG }}
       run: |
         # Validate required secrets
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
@@ -44,7 +118,7 @@ runs:
           exit 1
         fi
 
-        # Download latest ASPM Scanner
+        # Download ASPM Scanner
         echo "Downloading AccuKnox ASPM Scanner..."
         curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.13.4/accuknox-aspm-scanner -o accuknox-aspm-scanner
         chmod +x accuknox-aspm-scanner
@@ -56,13 +130,16 @@ runs:
           SOFT_FAIL_ARG="--softfail"
         fi
 
-        # Run SAST scan (OpenGrep)
+        # Run SAST scan with debug, verbose, and metrics off
         echo "Running AccuKnox SAST scan..."
         ./accuknox-aspm-scanner scan $SOFT_FAIL_ARG sast \
-          --command "." \
-          --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
-          --commit-ref "${GITHUB_REF#refs/heads/}" \
-          --commit-sha "${GITHUB_SHA}" \
+          --command "--verbose --metrics=off" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
+          --repo-url "${GITHUB_REPOSITORY}" \
+          --commit-ref "${GITHUB_REF#refs/heads/}" \
+          --commit-sha "${GITHUB_SHA}" \
+          --accuknox-endpoint "$ACCUKNOX_ENDPOINT" \
+          --accuknox-token "$ACCUKNOX_TOKEN" \
+          --accuknox-label "$ACCUKNOX_LABEL" \
           --container-mode
