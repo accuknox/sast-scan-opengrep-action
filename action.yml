@@ -130,16 +130,16 @@ runs:
           SOFT_FAIL_ARG="--softfail"
         fi
 
-        # Run SAST scan with debug, verbose, and metrics off
+        # Run SAST scan (auto-upload to CSPM)
         echo "Running AccuKnox SAST scan..."
+        ACCUKNOX_ENDPOINT="$ACCUKNOX_ENDPOINT" \
+        ACCUKNOX_TOKEN="$ACCUKNOX_TOKEN" \
+        ACCUKNOX_LABEL="$ACCUKNOX_LABEL" \
         ./accuknox-aspm-scanner scan $SOFT_FAIL_ARG sast \
-          --command "--verbose --metrics=off" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
           --repo-url "${GITHUB_REPOSITORY}" \
           --commit-ref "${GITHUB_REF#refs/heads/}" \
           --commit-sha "${GITHUB_SHA}" \
-          --accuknox-endpoint "$ACCUKNOX_ENDPOINT" \
-          --accuknox-token "$ACCUKNOX_TOKEN" \
-          --accuknox-label "$ACCUKNOX_LABEL" \
-          --container-mode
+          --container-mode \
+          --command "--verbose --metrics=off"
