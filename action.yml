@@ -37,7 +37,6 @@ runs:
         ACCUKNOX_ENDPOINT: ${{ inputs.ACCUKNOX_ENDPOINT }}
         ACCUKNOX_TOKEN: ${{ inputs.ACCUKNOX_TOKEN }}
         ACCUKNOX_LABEL: ${{ inputs.ACCUKNOX_LABEL }}
-        DEBUG: TRUE
       run: |
         # Validate required secrets
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
@@ -57,14 +56,14 @@ runs:
           SOFT_FAIL_ARG="--softfail"
         fi
 
-        # Run SAST scan (auto-upload to CSPM)
+        # Run SAST scan using OpenGrep (auto-upload to CSPM)
         echo "Running AccuKnox SAST scan..."
         ./accuknox-aspm-scanner scan $SOFT_FAIL_ARG sast \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          --repo-url "${GITHUB_REPOSITORY}" \
+          --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
           --commit-ref "${GITHUB_REF#refs/heads/}" \
-          --commit-sha "${GITHUB_SHA}" \
+          --commit-sha "$GITHUB_SHA" \
           --accuknox-endpoint "$ACCUKNOX_ENDPOINT" \
           --accuknox-token "$ACCUKNOX_TOKEN" \
           --accuknox-label "$ACCUKNOX_LABEL" \
