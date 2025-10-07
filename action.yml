@@ -37,6 +37,7 @@ runs:
         ACCUKNOX_ENDPOINT: ${{ inputs.ACCUKNOX_ENDPOINT }}
         ACCUKNOX_TOKEN: ${{ inputs.ACCUKNOX_TOKEN }}
         ACCUKNOX_LABEL: ${{ inputs.ACCUKNOX_LABEL }}
+        DEBUG: TRUE
       run: |
         # Validate required secrets
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
