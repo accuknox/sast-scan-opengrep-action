@@ -1,13 +1,22 @@
 name: "AccuKnox SAST Scan"
-description: "Run SAST scan on the repository using OpenGrep; results are automatically uploaded to AccuKnox CSPM panel."
+
+description: "Run AccuKnox SAST scan on the repository; results are automatically uploaded to CSPM panel."
 
 inputs:
   soft_fail:
     description: "Do not fail the pipeline if scan finds issues"
     required: false
     default: true
+  pipeline_id:
+    description: "Pipeline/Job ID to correlate with CI/CD runs"
+    required: false
+    default: ${{ github.run_id }}
+  job_url:
+    description: "URL for the current GitHub job"
+    required: false
+    default: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
   ACCUKNOX_ENDPOINT:
-    description: "AccuKnox CSPM panel endpoint URL"
+    description: "CSPM panel endpoint URL"
     required: true
   ACCUKNOX_TOKEN:
     description: "Token for authenticating with CSPM panel"
@@ -22,25 +31,27 @@ runs:
     - name: Run AccuKnox SAST Scan
       shell: bash
       env:
+        SOFT_FAIL: ${{ inputs.soft_fail }}
+        PIPELINE_ID: ${{ inputs.pipeline_id }}
+        JOB_URL: ${{ inputs.job_url }}
         ACCUKNOX_ENDPOINT: ${{ inputs.ACCUKNOX_ENDPOINT }}
         ACCUKNOX_TOKEN: ${{ inputs.ACCUKNOX_TOKEN }}
         ACCUKNOX_LABEL: ${{ inputs.ACCUKNOX_LABEL }}
-        SOFT_FAIL: ${{ inputs.soft_fail }}
-        DEBUG: "TRUE"
       run: |
-        # Check required secrets
+        # Validate required secrets
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
           echo "ERROR: ACCUKNOX_ENDPOINT, ACCUKNOX_TOKEN, and ACCUKNOX_LABEL must be set!"
           exit 1
         fi
 
-        # Download scanner
+        # Download ASPM Scanner
         echo "Downloading AccuKnox ASPM Scanner..."
         curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.13.4/accuknox-aspm-scanner -o accuknox-aspm-scanner
         chmod +x accuknox-aspm-scanner
 
-        # Determine soft fail argument
+        # Determine soft-fail argument
         SOFT_FAIL_ARG=""
+        SOFT_FAIL="${SOFT_FAIL//[$'\t\r\n ']}"  # clean whitespace
         if [ "$SOFT_FAIL" = "true" ]; then
           SOFT_FAIL_ARG="--softfail"
         fi
@@ -48,10 +59,11 @@ runs:
         # Run SAST scan (auto-upload to CSPM)
         echo "Running AccuKnox SAST scan..."
         ./accuknox-aspm-scanner scan $SOFT_FAIL_ARG sast \
+          --pipeline-id "$PIPELINE_ID" \
+          --job-url "$JOB_URL" \
           --repo-url "${GITHUB_REPOSITORY}" \
-          --branch "${GITHUB_REF#refs/heads/}" \
+          --commit-ref "${GITHUB_REF#refs/heads/}" \
           --commit-sha "${GITHUB_SHA}" \
-          --pipeline-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
           --accuknox-endpoint "$ACCUKNOX_ENDPOINT" \
           --accuknox-token "$ACCUKNOX_TOKEN" \
           --accuknox-label "$ACCUKNOX_LABEL" \
