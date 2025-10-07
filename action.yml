@@ -26,6 +26,7 @@ runs:
         ACCUKNOX_TOKEN: ${{ inputs.ACCUKNOX_TOKEN }}
         ACCUKNOX_LABEL: ${{ inputs.ACCUKNOX_LABEL }}
         SOFT_FAIL: ${{ inputs.soft_fail }}
+        DEBUG: "TRUE"
       run: |
         # Check required secrets
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
