@@ -1,6 +1,6 @@
-# Accuknox SAST: Opengrep
+# Accuknox SAST
 
-This performs an Opengrep SAST scan on your repository and uploads the results to AccuKnox's CSPM panel. It helps in identifying security issues and integrates seamlessly with GitHub Actions workflows.
+This performs an SAST scan on your repository and uploads the results to AccuKnox's CSPM panel. It helps in identifying security issues and integrates seamlessly with GitHub Actions workflows.
 
 ## Features
 - Runs Opengrep to analyze the repository.
@@ -14,15 +14,13 @@ This performs an Opengrep SAST scan on your repository and uploads the results t
 | pipeline_id | GitHub Run ID | Yes | `${{ github.run_id }}` |
 | job_url | GitHub Job URL | Yes | `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}` |
 | accuknox_endpoint | CSPM panel URL | Yes | `cspm.demo.accuknox.com` |
-| accuknox_tenant | AccuKnox Tenant ID | Yes |  |
 | accuknox_token | AccuKnox API Token | Yes |  |
 | accuknox_label | Label for scan results | Yes |  |
-| input_soft_fail | Continue even if scan fails | No | `false` |
-| upload_artifact | Upload scan results as artifact | No | `true` |
+| soft_fail | Continue even if scan fails | No | `false` |
 
 ## Usage Example
 ```yaml
-name: Accuknox SAST: Opengrep
+name: Accuknox SAST
 
 on:
   push:
@@ -42,10 +40,9 @@ jobs:
       - name: "Run Accuknox SAST: Opengrep"
         uses: accuknox/sast-scan-opengrep-action@1.0.0
         with:
-          accuknox_endpoint: "cspm.stage.accuknox.com"
-          accuknox_tenant: "${{ secrets.STAGE_TENANT_ID }}"
-          accuknox_token: "${{ secrets.STAGE_TOKEN }}"
-          accuknox_label: "SPOC"
-          input_soft_fail: "true"
-          upload_artifact: false
+          with:
+          ACCUKNOX_ENDPOINT: ${{ secrets.ACCUKNOX_ENDPOINT }}
+          ACCUKNOX_TOKEN: ${{ secrets.ACCUKNOX_TOKEN }}
+          ACCUKNOX_LABEL: ${{ secrets.ACCUKNOX_LABEL }}
+          soft_fail: true
 ```
