@@ -41,8 +41,8 @@ jobs:
         uses: accuknox/sast-scan-opengrep-action@1.0.0
         with:
           with:
-          ACCUKNOX_ENDPOINT: ${{ secrets.ACCUKNOX_ENDPOINT }}
-          ACCUKNOX_TOKEN: ${{ secrets.ACCUKNOX_TOKEN }}
-          ACCUKNOX_LABEL: ${{ secrets.ACCUKNOX_LABEL }}
+          accuknox_endpoint: ${{ secrets.ACCUKNOX_ENDPOINT }}
+          accuknox_token: ${{ secrets.ACCUKNOX_TOKEN }}
+          accuknox_label: ${{ secrets.ACCUKNOX_LABEL }}
           soft_fail: true
 ```
