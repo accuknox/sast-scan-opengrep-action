@@ -7,6 +7,7 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 - Uploads scan results to AccuKnox CSPM panel.
 - Supports artifact upload to GitHub.
 - Allows soft failure for non-blocking scans.
+- Enables AI analysis for intelligent security insights.
 
 ## Inputs
 | Name | Description | Required | Default |
@@ -16,6 +17,8 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 | accuknox_endpoint | CSPM panel URL | Yes | `cspm.demo.accuknox.com` |
 | accuknox_token | AccuKnox API Token | Yes |  |
 | accuknox_label | Label for scan results | Yes |  |
+| accuknox_ai_analysis | Enable AI analysis for scan results | No | `false` |
+| anthropic_api_key | Anthropic API key for AI analysis | No |  |
 | soft_fail | Continue even if scan fails | No | `false` |
 
 ## Usage Example
@@ -43,5 +46,7 @@ jobs:
           accuknox_endpoint: ${{ secrets.ACCUKNOX_ENDPOINT }}
           accuknox_token: ${{ secrets.ACCUKNOX_TOKEN }}
           accuknox_label: ${{ secrets.ACCUKNOX_LABEL }}
-          soft_fail: true
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY}}
+          accuknox_ai_analysis: "false"
+          soft_fail: "true"
 ```
