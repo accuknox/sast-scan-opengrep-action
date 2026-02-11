@@ -84,7 +84,6 @@ runs:
         ./accuknox-aspm-scanner scan --keep-results $SOFT_FAIL_ARG sast \
           --command "." \
           --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
-          --commit-ref "${GITHUB_REF#refs/heads/}" \
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
