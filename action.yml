@@ -31,6 +31,10 @@ inputs:
     description: "Enable AI analysis"
     required: false
     default: "true"
+  upload_results:
+    description: "Upload scan results as GitHub artifact"
+    required: false
+    default: "true" 
 runs:
   using: "composite"
   steps:
@@ -44,6 +48,7 @@ runs:
         ACCUKNOX_TOKEN: ${{ inputs.accuknox_token }}
         ACCUKNOX_LABEL: ${{ inputs.accuknox_label }}
         ACCUKNOX_AI_ANALYSIS: ${{ inputs.accuknox_ai_analysis }}
+        UPLOAD_RESULTS: ${{ inputs.upload_results }}
       run: |
         # Validate required secrets
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
@@ -79,3 +84,11 @@ runs:
           --job-url "$JOB_URL" \
           --container-mode \
           $AI_ARGS
+    - name: Upload AccuKnox Scan Results
+      if: inputs.upload_results == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: accuknox-scan-results
+        path: |
+          results-*.json
+        retention-days: 30
