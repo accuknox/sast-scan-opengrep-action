@@ -70,7 +70,7 @@ To use a custom AI model for analysis, add a `codeassure.json` file to the root 
 {
   "model": {
     "provider": "openai",
-    "name": "your-model-name",
+    "name": "your-model-id",
     "api_base": "https://api.openai.com/v1",
     "api_key": "$YOUR_API_KEY"
   }
