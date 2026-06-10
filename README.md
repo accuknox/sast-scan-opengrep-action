@@ -20,6 +20,8 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 | accuknox_ai_analysis | Enable AI analysis for scan results | No | `false` |
 | anthropic_api_key | Anthropic API key for AI analysis | No |  |
 | soft_fail | Continue even if scan fails | No | `false` |
+| severity | Severity level (e.g. High, Medium,Critical) to fail the pipeline | No | `HIGH` |
+
 
 ## Usage Example
 ```yaml
@@ -49,4 +51,5 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY}}
           accuknox_ai_analysis: "false"
           soft_fail: "true"
+          severity: "HIGH"
 ```

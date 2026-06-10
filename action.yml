@@ -27,6 +27,10 @@ inputs:
   accuknox_label:
     description: "Label in AccuKnox SaaS for scan results"
     required: true
+  severity:
+    description: "Comma-separated severities: MEDIUM, HIGH, CRITICAL"
+    required: false
+    default: "HIGH"
   accuknox_ai_analysis:
     description: "Enable AI analysis"
     required: false
@@ -47,6 +51,7 @@ runs:
         ACCUKNOX_ENDPOINT: ${{ inputs.accuknox_endpoint }}
         ACCUKNOX_TOKEN: ${{ inputs.accuknox_token }}
         ACCUKNOX_LABEL: ${{ inputs.accuknox_label }}
+        SEVERITY: ${{ inputs.severity }}
         ACCUKNOX_AI_ANALYSIS: ${{ inputs.accuknox_ai_analysis }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
       run: |
@@ -58,7 +63,7 @@ runs:
 
         # Download latest ASPM Scanner
         echo "Downloading AccuKnox ASPM Scanner..."
-        curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.2/accuknox-aspm-scanner -o accuknox-aspm-scanner
+        curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.6/accuknox-aspm-scanner -o accuknox-aspm-scanner
         chmod +x accuknox-aspm-scanner
 
         # Determine soft-fail argument
@@ -66,6 +71,12 @@ runs:
         SOFT_FAIL="${SOFT_FAIL//[$'\t\r\n ']}"  # clean whitespace
         if [ "$SOFT_FAIL" = "true" ]; then
           SOFT_FAIL_ARG="--softfail"
+        fi
+        # Build severity argument
+        SEVERITY_ARG=""
+        SEVERITY="${SEVERITY//[$'\t\r\n ']}"  # clean whitespace
+        if [ -n "$SEVERITY" ]; then
+          SEVERITY_ARG="--severity $SEVERITY"
         fi
 
         # Build AI analysis arguments
@@ -88,4 +99,5 @@ runs:
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
           --container-mode \
+          $SEVERITY_ARG \
           $AI_ARGS
