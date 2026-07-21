@@ -63,7 +63,7 @@ runs:
 
         # Download latest ASPM Scanner
         echo "Downloading AccuKnox ASPM Scanner..."
-        curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.6/accuknox-aspm-scanner -o accuknox-aspm-scanner
+        curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7-rc.3/accuknox-aspm-scanner -o accuknox-aspm-scanner
         chmod +x accuknox-aspm-scanner
 
         # Determine soft-fail argument
@@ -90,6 +90,15 @@ runs:
           fi
         fi
 
+        # Default behavior stays unchanged: container mode
+        SAST_MODE_ARG="--container-mode"
+        # Minimal fix: if already inside a container runner, avoid nested Docker mount issue
+        if [ -f "/.dockerenv" ] || grep -qaE '(docker|containerd)' /proc/1/cgroup 2>/dev/null; then
+          echo "Container runner detected; switching SAST to native mode (no --container-mode)."
+          ./accuknox-aspm-scanner tool install --type sast
+          SAST_MODE_ARG=""
+        fi
+
         # Run SAST scan (OpenGrep)
         echo "Running AccuKnox SAST scan..."
         ./accuknox-aspm-scanner scan --keep-results $SOFT_FAIL_ARG sast \
@@ -98,6 +107,6 @@ runs:
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          --container-mode \
+          $SAST_MODE_ARG \
           $SEVERITY_ARG \
           $AI_ARGS
