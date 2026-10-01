@@ -39,10 +39,6 @@ inputs:
     description: "Optional Anthropic API key (exported as ANTHROPIC_API_KEY for CodeAssure)"
     required: false
     default: ""
-  scanner_version:
-    description: "aspm-scanner-cli GitHub release tag (e.g. v0.15.1). Older tags such as v0.14.7-rc.3 still work."
-    required: false
-    default: "v0.15.1"
 
 runs:
   using: "composite"
@@ -59,7 +55,6 @@ runs:
         SEVERITY: ${{ inputs.severity }}
         ACCUKNOX_AI_ANALYSIS: ${{ inputs.accuknox_ai_analysis }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
-        SCANNER_VERSION: ${{ inputs.scanner_version }}
       run: |
         set -euo pipefail
 
@@ -68,15 +63,13 @@ runs:
           exit 1
         fi
 
-        SCANNER_VERSION="${SCANNER_VERSION//[$'\t\r\n ']}"
+        SCANNER_VERSION="v0.15.1"
         case "$(uname -s)-$(uname -m)" in
           Linux-x86_64|Linux-amd64)
             ASSET="accuknox-aspm-scanner-linux-amd64"
-            FALLBACK_ASSET="accuknox-aspm-scanner"
             ;;
           Darwin-arm64)
             ASSET="accuknox-aspm-scanner-darwin-arm64"
-            FALLBACK_ASSET=""
             ;;
           *)
             echo "ERROR: Native OpenGrep action supports Linux x86_64 and macOS arm64. Got $(uname -s) $(uname -m)."
@@ -85,17 +78,8 @@ runs:
         esac
 
         echo "Downloading AccuKnox ASPM Scanner ${SCANNER_VERSION} (${ASSET})..."
-        if ! curl -fL "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${ASSET}" \
-          -o accuknox-aspm-scanner; then
-          if [ -n "$FALLBACK_ASSET" ]; then
-            echo "Named asset missing; trying ${FALLBACK_ASSET} (older tags)..."
-            curl -fL "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${FALLBACK_ASSET}" \
-              -o accuknox-aspm-scanner
-          else
-            echo "ERROR: Could not download ${ASSET} for ${SCANNER_VERSION}."
-            exit 1
-          fi
-        fi
+        curl -fL "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${ASSET}" \
+          -o accuknox-aspm-scanner
         chmod +x accuknox-aspm-scanner
 
         echo "Installing local OpenGrep binary and rules (no container image)..."

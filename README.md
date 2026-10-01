@@ -2,7 +2,7 @@
 
 This performs an SAST scan on your repository and uploads the results to AccuKnox's CSPM panel.
 
-**Current action (new tags / `main`):** OpenGrep runs as a **local binary** (`tool install --type sast`). No Docker image, no `--container-mode`.
+**Current action (new tags / `main`):** OpenGrep runs as a **local binary** (`tool install --type sast`). No Docker image, no `--container-mode`. Scanner CLI is **v0.15.1** only.
 
 **Older action tags (e.g. `v1.0.6`):** still use the OpenGrep **container image**. Pin those tags if you need the old behavior.
 
@@ -18,7 +18,6 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 | anthropic_api_key | Exported as `ANTHROPIC_API_KEY` if set | No |  |
 | soft_fail | Continue even if scan finds issues | No | `true` |
 | severity | Severities that fail the job when `soft_fail` is false | No | `HIGH` |
-| scanner_version | aspm-scanner-cli release tag | No | `v0.15.1` |
 
 ## Usage Example
 ```yaml
@@ -48,7 +47,6 @@ jobs:
           accuknox_ai_analysis: "false"
           soft_fail: "true"
           severity: "HIGH"
-          # scanner_version: v0.15.2-rc.3   # optional; default is v0.15.1
 ```
 
 Runners: **Linux x86_64** (`ubuntu-latest`) and **macOS arm64**.
