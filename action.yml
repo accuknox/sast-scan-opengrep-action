@@ -32,13 +32,18 @@ inputs:
     required: false
     default: "HIGH"
   accuknox_ai_analysis:
-    description: "Enable AI analysis"
+    description: "Enable AI analysis (CodeAssure). Requires a model key in the environment."
     required: false
     default: "false"
   anthropic_api_key:
-    description: "Anthropic API key for AI analysis"
+    description: "Optional Anthropic API key (exported as ANTHROPIC_API_KEY for CodeAssure)"
     required: false
     default: ""
+  scanner_version:
+    description: "aspm-scanner-cli GitHub release tag (e.g. v0.15.2-rc.3). Older tags such as v0.14.7-rc.3 still work."
+    required: false
+    default: "v0.15.2-rc.3"
+
 runs:
   using: "composite"
   steps:
@@ -54,59 +59,72 @@ runs:
         SEVERITY: ${{ inputs.severity }}
         ACCUKNOX_AI_ANALYSIS: ${{ inputs.accuknox_ai_analysis }}
         ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        SCANNER_VERSION: ${{ inputs.scanner_version }}
       run: |
-        # Validate required secrets
+        set -euo pipefail
+
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
           echo "ERROR: ACCUKNOX_ENDPOINT, ACCUKNOX_TOKEN, and ACCUKNOX_LABEL must be set!"
           exit 1
         fi
 
-        # Download latest ASPM Scanner
-        echo "Downloading AccuKnox ASPM Scanner..."
-        curl -L https://github.com/accuknox/aspm-scanner-cli/releases/download/v0.14.7-rc.3/accuknox-aspm-scanner -o accuknox-aspm-scanner
+        SCANNER_VERSION="${SCANNER_VERSION//[$'\t\r\n ']}"
+        case "$(uname -s)-$(uname -m)" in
+          Linux-x86_64|Linux-amd64)
+            ASSET="accuknox-aspm-scanner-linux-amd64"
+            FALLBACK_ASSET="accuknox-aspm-scanner"
+            ;;
+          Darwin-arm64)
+            ASSET="accuknox-aspm-scanner-darwin-arm64"
+            FALLBACK_ASSET=""
+            ;;
+          *)
+            echo "ERROR: Native OpenGrep action supports Linux x86_64 and macOS arm64. Got $(uname -s) $(uname -m)."
+            exit 1
+            ;;
+        esac
+
+        echo "Downloading AccuKnox ASPM Scanner ${SCANNER_VERSION} (${ASSET})..."
+        if ! curl -fL "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${ASSET}" \
+          -o accuknox-aspm-scanner; then
+          if [ -n "$FALLBACK_ASSET" ]; then
+            echo "Named asset missing; trying ${FALLBACK_ASSET} (older tags)..."
+            curl -fL "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${FALLBACK_ASSET}" \
+              -o accuknox-aspm-scanner
+          else
+            echo "ERROR: Could not download ${ASSET} for ${SCANNER_VERSION}."
+            exit 1
+          fi
+        fi
         chmod +x accuknox-aspm-scanner
 
-        # Determine soft-fail argument
+        echo "Installing local OpenGrep binary and rules (no container image)..."
+        ./accuknox-aspm-scanner tool install --type sast
+
         SOFT_FAIL_ARG=""
-        SOFT_FAIL="${SOFT_FAIL//[$'\t\r\n ']}"  # clean whitespace
+        SOFT_FAIL="${SOFT_FAIL//[$'\t\r\n ']}"
         if [ "$SOFT_FAIL" = "true" ]; then
           SOFT_FAIL_ARG="--softfail"
         fi
-        # Build severity argument
+
         SEVERITY_ARG=""
-        SEVERITY="${SEVERITY//[$'\t\r\n ']}"  # clean whitespace
+        SEVERITY="${SEVERITY//[$'\t\r\n ']}"
         if [ -n "$SEVERITY" ]; then
           SEVERITY_ARG="--severity $SEVERITY"
         fi
 
-        # Build AI analysis arguments
         AI_ARGS=""
+        ACCUKNOX_AI_ANALYSIS="${ACCUKNOX_AI_ANALYSIS//[$'\t\r\n ']}"
         if [ "$ACCUKNOX_AI_ANALYSIS" = "true" ]; then
           AI_ARGS="--ai-analysis"
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
-            AI_ARGS="$AI_ARGS --anthropic-api-key=$ANTHROPIC_API_KEY"
-          else
-            echo "WARNING: AI analysis enabled but ANTHROPIC_API_KEY not provided"
-          fi
         fi
 
-        # Default behavior stays unchanged: container mode
-        SAST_MODE_ARG="--container-mode"
-        # Minimal fix: if already inside a container runner, avoid nested Docker mount issue
-        if [ -f "/.dockerenv" ] || grep -qaE '(docker|containerd)' /proc/1/cgroup 2>/dev/null; then
-          echo "Container runner detected; switching SAST to native mode (no --container-mode)."
-          ./accuknox-aspm-scanner tool install --type sast
-          SAST_MODE_ARG=""
-        fi
-
-        # Run SAST scan (OpenGrep)
-        echo "Running AccuKnox SAST scan..."
+        echo "Running AccuKnox SAST scan with native OpenGrep..."
         ./accuknox-aspm-scanner scan --keep-results $SOFT_FAIL_ARG sast \
-          --command "." \
+          --command "scan ." \
           --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          $SAST_MODE_ARG \
           $SEVERITY_ARG \
           $AI_ARGS
