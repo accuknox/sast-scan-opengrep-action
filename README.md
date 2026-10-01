@@ -12,15 +12,16 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 ## Inputs
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
-| pipeline_id | GitHub Run ID | Yes | `${{ github.run_id }}` |
-| job_url | GitHub Job URL | Yes | `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}` |
-| accuknox_endpoint | CSPM panel URL | Yes | `cspm.demo.accuknox.com` |
+| pipeline_id | GitHub Run ID | No | `${{ github.run_id }}` |
+| job_url | GitHub Job URL | No | `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}` |
+| accuknox_endpoint | CSPM panel URL | Yes |  |
 | accuknox_token | AccuKnox API Token | Yes |  |
 | accuknox_label | Label for scan results | Yes |  |
 | accuknox_ai_analysis | Enable AI analysis for scan results | No | `false` |
-| anthropic_api_key | Anthropic API key for AI analysis | No |  |
-| soft_fail | Continue even if scan fails | No | `false` |
-| severity | Severity level (e.g. High, Medium,Critical) to fail the pipeline | No | `HIGH` |
+| anthropic_api_key | Anthropic API key for AI analysis (exported as `ANTHROPIC_API_KEY`) | No |  |
+| soft_fail | Continue even if scan finds issues | No | `true` |
+| severity | Comma-separated severities: MEDIUM, HIGH, CRITICAL | No | `HIGH` |
+| scanner_version | aspm-scanner-cli GitHub release tag | No | `v0.15.1` |
 
 
 ## Usage Example
