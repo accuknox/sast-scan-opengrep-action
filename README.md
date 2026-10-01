@@ -1,24 +1,28 @@
 # Accuknox SAST
 
-This performs an SAST scan on your repository and uploads the results to AccuKnox's CSPM panel.
+This performs an SAST scan on your repository and uploads the results to AccuKnox's CSPM panel. It helps in identifying security issues and integrates seamlessly with GitHub Actions workflows.
 
-**Current action (new tags / `main`):** OpenGrep runs as a **local binary** (`tool install --type sast`). No Docker image, no `--container-mode`. Scanner CLI defaults to **v0.15.1** (`scanner_version`).
-
-**Older action tags (e.g. `v1.0.6`):** still use the OpenGrep **container image**. Pin those tags if you need the old behavior.
+## Features
+- Runs Opengrep to analyze the repository.
+- Uploads scan results to AccuKnox CSPM panel.
+- Supports artifact upload to GitHub.
+- Allows soft failure for non-blocking scans.
+- Enables AI analysis for intelligent security insights.
 
 ## Inputs
 | Name | Description | Required | Default |
 |------|-------------|----------|---------|
-| pipeline_id | GitHub Run ID | No | `${{ github.run_id }}` |
-| job_url | GitHub Job URL | No | this Actions run URL |
-| accuknox_endpoint | CSPM panel URL | Yes |  |
+| pipeline_id | GitHub Run ID | Yes | `${{ github.run_id }}` |
+| job_url | GitHub Job URL | Yes | `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}` |
+| accuknox_endpoint | CSPM panel URL | Yes | `cspm.demo.accuknox.com` |
 | accuknox_token | AccuKnox API Token | Yes |  |
 | accuknox_label | Label for scan results | Yes |  |
-| accuknox_ai_analysis | Enable AI analysis | No | `false` |
-| anthropic_api_key | Exported as `ANTHROPIC_API_KEY` if set | No |  |
-| soft_fail | Continue even if scan finds issues | No | `true` |
-| severity | Severities that fail the job when `soft_fail` is false | No | `HIGH` |
+| accuknox_ai_analysis | Enable AI analysis for scan results | No | `false` |
+| anthropic_api_key | Anthropic API key for AI analysis | No |  |
+| soft_fail | Continue even if scan fails | No | `false` |
+| severity | Severity level (e.g. High, Medium,Critical) to fail the pipeline | No | `HIGH` |
 | scanner_version | aspm-scanner-cli release tag | No | `v0.15.1` |
+
 
 ## Usage Example
 ```yaml
@@ -37,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: "Run Accuknox SAST: Opengrep"
         uses: accuknox/sast-scan-opengrep-action@latest
@@ -45,12 +49,8 @@ jobs:
           accuknox_endpoint: ${{ secrets.ACCUKNOX_ENDPOINT }}
           accuknox_token: ${{ secrets.ACCUKNOX_TOKEN }}
           accuknox_label: ${{ secrets.ACCUKNOX_LABEL }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY}}
           accuknox_ai_analysis: "false"
           soft_fail: "true"
           severity: "HIGH"
-          # scanner_version: v0.15.1
 ```
-
-Runners: **Linux x86_64** (`ubuntu-latest`) and **macOS arm64**.
-
-The job **uploads** to AccuKnox (does not use `--skip-upload`).
