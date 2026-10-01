@@ -40,9 +40,9 @@ inputs:
     required: false
     default: ""
   scanner_version:
-    description: "aspm-scanner-cli GitHub release tag (e.g. v0.15.2-rc.3). Older tags such as v0.14.7-rc.3 still work."
+    description: "aspm-scanner-cli GitHub release tag (e.g. v0.15.1). Older tags such as v0.14.7-rc.3 still work."
     required: false
-    default: "v0.15.2-rc.3"
+    default: "v0.15.1"
 
 runs:
   using: "composite"
