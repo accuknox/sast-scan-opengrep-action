@@ -1,5 +1,5 @@
-name: "Accuknox SAST: Opengrep"
-description: "Run AccuKnox SAST scan on the repository; results are automatically uploaded to CSPM panel."
+name: "Accuknox SAST: Opengrep (native)"
+description: "Run AccuKnox SAST with the local OpenGrep binary (no Docker / --container-mode)."
 
 branding:
   icon: "shield"
@@ -28,17 +28,13 @@ inputs:
     description: "Label in AccuKnox SaaS for scan results"
     required: true
   severity:
-    description: "Comma-separated severities: MEDIUM, HIGH, CRITICAL"
+    description: "Comma-separated severities that fail the scan when soft_fail is false"
     required: false
     default: "HIGH"
   accuknox_ai_analysis:
     description: "Enable AI analysis (CodeAssure). Requires a model key in the environment."
     required: false
     default: "false"
-  anthropic_api_key:
-    description: "Optional Anthropic API key (exported as ANTHROPIC_API_KEY for CodeAssure)"
-    required: false
-    default: ""
   scanner_version:
     description: "aspm-scanner-cli GitHub release tag"
     required: false
@@ -47,7 +43,7 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: Run AccuKnox SAST Scan
+    - name: Run AccuKnox SAST scan (native OpenGrep)
       shell: bash
       env:
         SOFT_FAIL: ${{ inputs.soft_fail }}
@@ -58,13 +54,12 @@ runs:
         ACCUKNOX_LABEL: ${{ inputs.accuknox_label }}
         SEVERITY: ${{ inputs.severity }}
         ACCUKNOX_AI_ANALYSIS: ${{ inputs.accuknox_ai_analysis }}
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
         SCANNER_VERSION: ${{ inputs.scanner_version }}
       run: |
         set -euo pipefail
 
-        if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
-          echo "ERROR: ACCUKNOX_ENDPOINT, ACCUKNOX_TOKEN, and ACCUKNOX_LABEL must be set!"
+        if [ -z "${ACCUKNOX_ENDPOINT}" ] || [ -z "${ACCUKNOX_TOKEN}" ] || [ -z "${ACCUKNOX_LABEL}" ]; then
+          echo "ERROR: ACCUKNOX_ENDPOINT, ACCUKNOX_TOKEN, and ACCUKNOX_LABEL must be set."
           exit 1
         fi
 
@@ -78,6 +73,10 @@ runs:
             ;;
           Darwin-arm64)
             ASSET="accuknox-aspm-scanner-darwin-arm64"
+            ;;
+          Darwin-x86_64)
+            echo "ERROR: No published macOS Intel native CLI asset. Use a Linux runner."
+            exit 1
             ;;
           *)
             echo "ERROR: Native OpenGrep action supports Linux x86_64 and macOS arm64. Got $(uname -s) $(uname -m)."
@@ -102,7 +101,7 @@ runs:
         SEVERITY_ARG=""
         SEVERITY="${SEVERITY//[$'\t\r\n ']}"
         if [ -n "$SEVERITY" ]; then
-          SEVERITY_ARG="--severity $SEVERITY"
+          SEVERITY_ARG="--severity ${SEVERITY}"
         fi
 
         AI_ARGS=""
@@ -112,11 +111,12 @@ runs:
         fi
 
         echo "Running AccuKnox SAST scan with native OpenGrep..."
-        ./accuknox-aspm-scanner scan --keep-results $SOFT_FAIL_ARG sast \
+        # No --container-mode: OpenGrep runs from the tool install dir.
+        ./accuknox-aspm-scanner scan --keep-results ${SOFT_FAIL_ARG} sast \
           --command "scan ." \
           --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          $SEVERITY_ARG \
-          $AI_ARGS
+          ${SEVERITY_ARG} \
+          ${AI_ARGS}
