@@ -32,27 +32,27 @@ inputs:
     required: false
     default: "HIGH"
   accuknox_ai_analysis:
-    description: "Enable AI analysis (CodeAssure). When true, provider, model, and an API key are required."
+    description: "Enable AI analysis (CodeAssure). Requires provider, model and API key."
     required: false
     default: "false"
   anthropic_api_key:
-    description: "Anthropic API key, exported as ANTHROPIC_API_KEY (an existing ANTHROPIC_API_KEY env is kept when this is empty). Used for AI SAST only when codeassure_provider is anthropic and codeassure_api_key and CODEASSURE_API_KEY are both empty."
+    description: "Anthropic API key. Used only when provider is anthropic and codeassure_api_key is not set."
     required: false
     default: ""
   codeassure_provider:
-    description: "Required when AI SAST is on. One of openai, openai-compatible, anthropic, google, gemini. Env CODEASSURE_PROVIDER is used when this is empty. Use anthropic for Anthropic's API. Use openai or openai-compatible for OpenRouter."
+    description: "AI provider: anthropic, openai, openai-compatible, google or gemini. Use openai-compatible for OpenRouter."
     required: false
     default: ""
   codeassure_model:
-    description: "Required when AI SAST is on. Model name, for example claude-sonnet-4-6. For OpenRouter use its model id, for example anthropic/claude-sonnet-4.6. Env CODEASSURE_MODEL is used when this is empty."
+    description: "Model name, e.g. claude-sonnet-4-6 (Anthropic) or anthropic/claude-haiku-4.5 (OpenRouter)."
     required: false
     default: ""
   codeassure_api_base:
-    description: "Optional API host. Leave empty for Anthropic so CodeAssure calls https://api.anthropic.com. Set https://openrouter.ai/api/v1 for OpenRouter, or any other non-default endpoint (Azure OpenAI, a company proxy). Env CODEASSURE_API_BASE is used when this is empty."
+    description: "API URL. Leave empty for the provider default; use https://openrouter.ai/api/v1 for OpenRouter."
     required: false
     default: ""
   codeassure_api_key:
-    description: "Required when AI SAST is on, unless CODEASSURE_API_KEY is set (or anthropic_api_key with provider anthropic). Exported as CODEASSURE_API_KEY. For OpenRouter this is the OpenRouter key, not the Anthropic key."
+    description: "API key for the selected provider."
     required: false
     default: ""
   scanner_version:
