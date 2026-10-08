@@ -32,11 +32,27 @@ inputs:
     required: false
     default: "HIGH"
   accuknox_ai_analysis:
-    description: "Enable AI analysis (CodeAssure). Requires a model key in the environment."
+    description: "Enable AI analysis (CodeAssure). Requires provider, model and API key."
     required: false
     default: "false"
   anthropic_api_key:
-    description: "Optional Anthropic API key (exported as ANTHROPIC_API_KEY for CodeAssure)"
+    description: "Anthropic API key. Used only when provider is anthropic and codeassure_api_key is not set."
+    required: false
+    default: ""
+  codeassure_provider:
+    description: "AI provider: anthropic, openai, openai-compatible, google or gemini. Use openai-compatible for OpenRouter."
+    required: false
+    default: ""
+  codeassure_model:
+    description: "Model name, e.g. claude-sonnet-4-6 (Anthropic) or anthropic/claude-haiku-4.5 (OpenRouter)."
+    required: false
+    default: ""
+  codeassure_api_base:
+    description: "API URL. Leave empty for the provider default; use https://openrouter.ai/api/v1 for OpenRouter."
+    required: false
+    default: ""
+  codeassure_api_key:
+    description: "API key for the selected provider."
     required: false
     default: ""
   scanner_version:
@@ -58,65 +74,111 @@ runs:
         ACCUKNOX_LABEL: ${{ inputs.accuknox_label }}
         SEVERITY: ${{ inputs.severity }}
         ACCUKNOX_AI_ANALYSIS: ${{ inputs.accuknox_ai_analysis }}
-        ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        INPUT_ANTHROPIC_API_KEY: ${{ inputs.anthropic_api_key }}
+        INPUT_CODEASSURE_PROVIDER: ${{ inputs.codeassure_provider }}
+        INPUT_CODEASSURE_MODEL: ${{ inputs.codeassure_model }}
+        INPUT_CODEASSURE_API_BASE: ${{ inputs.codeassure_api_base }}
+        INPUT_CODEASSURE_API_KEY: ${{ inputs.codeassure_api_key }}
         SCANNER_VERSION: ${{ inputs.scanner_version }}
       run: |
         set -euo pipefail
 
+        trim() { local v="${1//[$'\t\r\n ']}"; echo "$v"; }
+        is_true() { [ "$(trim "$1" | tr '[:upper:]' '[:lower:]')" = "true" ]; }
+
         if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
-          echo "ERROR: ACCUKNOX_ENDPOINT, ACCUKNOX_TOKEN, and ACCUKNOX_LABEL must be set!"
+          echo "::error::accuknox_endpoint, accuknox_token, and accuknox_label must be set."
           exit 1
         fi
 
-        SCANNER_VERSION="${SCANNER_VERSION//[$'\t\r\n ']}"
-        if [ -z "$SCANNER_VERSION" ]; then
-          SCANNER_VERSION="v0.15.1"
-        fi
+        SCANNER_VERSION="$(trim "$SCANNER_VERSION")"
+        SCANNER_VERSION="${SCANNER_VERSION:-v0.15.1}"
         case "$(uname -s)-$(uname -m)" in
-          Linux-x86_64|Linux-amd64)
-            ASSET="accuknox-aspm-scanner-linux-amd64"
-            ;;
-          Darwin-arm64)
-            ASSET="accuknox-aspm-scanner-darwin-arm64"
-            ;;
+          Linux-x86_64|Linux-amd64) ASSET="accuknox-aspm-scanner-linux-amd64" ;;
+          Darwin-arm64)             ASSET="accuknox-aspm-scanner-darwin-arm64" ;;
           *)
-            echo "ERROR: Native OpenGrep action supports Linux x86_64 and macOS arm64. Got $(uname -s) $(uname -m)."
+            echo "::error::Native OpenGrep action supports Linux x86_64 and macOS arm64. Got $(uname -s) $(uname -m)."
             exit 1
             ;;
         esac
 
+        # Keep the binary outside the workspace so it is not scanned or left in the repo.
+        TOOL_DIR="${RUNNER_TEMP:-/tmp}/accuknox"
+        SCANNER="$TOOL_DIR/accuknox-aspm-scanner"
+        mkdir -p "$TOOL_DIR"
+
         echo "Downloading AccuKnox ASPM Scanner ${SCANNER_VERSION} (${ASSET})..."
-        curl -fL "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${ASSET}" \
-          -o accuknox-aspm-scanner
-        chmod +x accuknox-aspm-scanner
+        curl -fsSL --retry 3 --retry-delay 5 \
+          "https://github.com/accuknox/aspm-scanner-cli/releases/download/${SCANNER_VERSION}/${ASSET}" \
+          -o "$SCANNER"
+        chmod +x "$SCANNER"
 
         echo "Installing local OpenGrep binary and rules (no container image)..."
-        ./accuknox-aspm-scanner tool install --type sast
+        "$SCANNER" tool install --type sast
 
-        SOFT_FAIL_ARG=""
-        SOFT_FAIL="${SOFT_FAIL//[$'\t\r\n ']}"
-        if [ "$SOFT_FAIL" = "true" ]; then
-          SOFT_FAIL_ARG="--softfail"
-        fi
+        EXTRA_ARGS=()
 
-        SEVERITY_ARG=""
-        SEVERITY="${SEVERITY//[$'\t\r\n ']}"
+        SEVERITY="$(trim "$SEVERITY")"
         if [ -n "$SEVERITY" ]; then
-          SEVERITY_ARG="--severity $SEVERITY"
+          EXTRA_ARGS+=(--severity "$SEVERITY")
         fi
 
-        AI_ARGS=""
-        ACCUKNOX_AI_ANALYSIS="${ACCUKNOX_AI_ANALYSIS//[$'\t\r\n ']}"
-        if [ "$ACCUKNOX_AI_ANALYSIS" = "true" ]; then
-          AI_ARGS="--ai-analysis"
+        if is_true "$ACCUKNOX_AI_ANALYSIS"; then
+          PROVIDER="${INPUT_CODEASSURE_PROVIDER:-${CODEASSURE_PROVIDER:-}}"
+          MODEL="${INPUT_CODEASSURE_MODEL:-${CODEASSURE_MODEL:-}}"
+          API_BASE="${INPUT_CODEASSURE_API_BASE:-${CODEASSURE_API_BASE:-}}"
+          if [ -z "$PROVIDER" ] || [ -z "$MODEL" ]; then
+            echo "::error::AI SAST requires codeassure_provider and codeassure_model (or CODEASSURE_PROVIDER and CODEASSURE_MODEL)."
+            exit 1
+          fi
+
+          if [ -n "$INPUT_ANTHROPIC_API_KEY" ]; then
+            export ANTHROPIC_API_KEY="$INPUT_ANTHROPIC_API_KEY"
+          fi
+          if [ -n "$INPUT_CODEASSURE_API_KEY" ]; then
+            export CODEASSURE_API_KEY="$INPUT_CODEASSURE_API_KEY"
+          fi
+          if [ -n "${CODEASSURE_API_KEY:-}" ]; then
+            KEY_VAR="CODEASSURE_API_KEY"
+          elif [ "$PROVIDER" = "anthropic" ] && [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+            KEY_VAR="ANTHROPIC_API_KEY"
+          else
+            if [ "$PROVIDER" = "anthropic" ]; then
+              echo "::error::AI SAST requires codeassure_api_key, CODEASSURE_API_KEY, or anthropic_api_key."
+            else
+              echo "::error::AI SAST with provider '${PROVIDER}' requires codeassure_api_key (or CODEASSURE_API_KEY). anthropic_api_key is only used with provider anthropic."
+            fi
+            exit 1
+          fi
+
+          echo "Installing local CodeAssure binary for AI SAST..."
+          "$SCANNER" tool install --type codeassure
+
+          # api_key holds "$VAR" so the secret itself is never written to disk.
+          CONFIG_PATH="$TOOL_DIR/codeassure.json"
+          PROVIDER="$PROVIDER" MODEL="$MODEL" API_BASE="$API_BASE" KEY_VAR="$KEY_VAR" CONFIG_PATH="$CONFIG_PATH" \
+            python3 -c '
+        import json, os
+        model = {"provider": os.environ["PROVIDER"], "name": os.environ["MODEL"], "api_key": "$" + os.environ["KEY_VAR"]}
+        if os.environ.get("API_BASE"):
+            model["api_base"] = os.environ["API_BASE"]
+        with open(os.environ["CONFIG_PATH"], "w", encoding="utf-8") as f:
+            json.dump({"model": model}, f)
+        '
+          echo "CodeAssure config: provider=${PROVIDER} model=${MODEL}"
+          EXTRA_ARGS+=(--codeassure-config "$CONFIG_PATH" --ai-analysis)
+        fi
+
+        SCAN_ARGS=(--keep-results)
+        if is_true "$SOFT_FAIL"; then
+          SCAN_ARGS+=(--softfail)
         fi
 
         echo "Running AccuKnox SAST scan with native OpenGrep..."
-        ./accuknox-aspm-scanner scan --keep-results $SOFT_FAIL_ARG sast \
+        "$SCANNER" scan "${SCAN_ARGS[@]}" sast \
           --command "scan ." \
-          --repo-url "https://github.com/${GITHUB_REPOSITORY}.git" \
+          --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          $SEVERITY_ARG \
-          $AI_ARGS
+          ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
