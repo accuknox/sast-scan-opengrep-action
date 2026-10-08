@@ -73,6 +73,19 @@ AI SAST writes a temporary CodeAssure config on the runner from these inputs. Le
           codeassure_provider: anthropic
           codeassure_model: claude-sonnet-4-6
           codeassure_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          aiscan_severity: "HIGH,CRITICAL"
           soft_fail: "true"
           severity: "HIGH"
+```
+
+`severity` decides which findings fail the scan; `aiscan_severity` decides which findings are sent for AI analysis (empty = all). Values are not case-sensitive.
+
+For other providers, set the provider, model and API key for that provider. Set `codeassure_api_base` only when the model is reached through a non-default host:
+
+```yaml
+          accuknox_ai_analysis: "true"
+          codeassure_provider: <provider>      # anthropic, openai, openai-compatible, google, gemini
+          codeassure_model: <model-id>
+          codeassure_api_base: <api-url>       # optional
+          codeassure_api_key: ${{ secrets.CODEASSURE_API_KEY }}
 ```
