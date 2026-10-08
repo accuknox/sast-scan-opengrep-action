@@ -25,6 +25,7 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 | anthropic_api_key | Anthropic API key, exported as `ANTHROPIC_API_KEY`. Used only when `codeassure_provider` is `anthropic` and `codeassure_api_key` and `CODEASSURE_API_KEY` are empty | No |  |
 | soft_fail | Continue even if scan finds issues | No | `true` |
 | severity | Comma-separated severities: MEDIUM, HIGH, CRITICAL | No | `HIGH` |
+| aiscan_severity | Comma-separated severities to send for AI analysis, e.g. `HIGH,CRITICAL`. Used only when AI is on. Empty = all findings | No |  |
 | scanner_version | aspm-scanner-cli GitHub release tag | No | `v0.15.1` |
 
 

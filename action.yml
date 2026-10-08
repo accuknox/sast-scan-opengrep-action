@@ -55,6 +55,10 @@ inputs:
     description: "API key for the selected provider."
     required: false
     default: ""
+  aiscan_severity:
+    description: "Comma-separated severities to send for AI analysis, e.g. HIGH,CRITICAL. Empty = all findings."
+    required: false
+    default: ""
   scanner_version:
     description: "aspm-scanner-cli GitHub release tag"
     required: false
@@ -79,6 +83,7 @@ runs:
         INPUT_CODEASSURE_MODEL: ${{ inputs.codeassure_model }}
         INPUT_CODEASSURE_API_BASE: ${{ inputs.codeassure_api_base }}
         INPUT_CODEASSURE_API_KEY: ${{ inputs.codeassure_api_key }}
+        AISCAN_SEVERITY: ${{ inputs.aiscan_severity }}
         SCANNER_VERSION: ${{ inputs.scanner_version }}
       run: |
         set -euo pipefail
@@ -167,6 +172,11 @@ runs:
         '
           echo "CodeAssure config: provider=${PROVIDER} model=${MODEL}"
           EXTRA_ARGS+=(--codeassure-config "$CONFIG_PATH" --ai-analysis)
+
+          AISCAN_SEVERITY="$(trim "$AISCAN_SEVERITY")"
+          if [ -n "$AISCAN_SEVERITY" ]; then
+            EXTRA_ARGS+=(--aiscan-severity "$AISCAN_SEVERITY")
+          fi
         fi
 
         SCAN_ARGS=(--keep-results)
