@@ -7,7 +7,7 @@ branding:
 
 inputs:
   soft_fail:
-    description: "Do not fail the pipeline if scan finds issues"
+    description: "Do not fail the pipeline if scan finds issues (with quality_gate: if the policy fails)"
     required: false
     default: "true"
   pipeline_id:
@@ -25,10 +25,10 @@ inputs:
     description: "Token for authenticating with CSPM panel"
     required: true
   accuknox_label:
-    description: "Label in AccuKnox SaaS for scan results"
+    description: "Label in AccuKnox SaaS for scan results (not needed with gate_only)"
     required: true
   severity:
-    description: "Comma-separated severities: MEDIUM, HIGH, CRITICAL"
+    description: "Comma-separated severities: MEDIUM, HIGH, CRITICAL. Ignored for pass/fail when quality_gate is on."
     required: false
     default: "HIGH"
   accuknox_ai_analysis:
@@ -59,15 +59,59 @@ inputs:
     description: "Comma-separated severities to send for AI analysis, e.g. HIGH,CRITICAL. Empty = all findings."
     required: false
     default: ""
+  quality_gate:
+    description: "Let the AccuKnox quality-gate policy pass, warn or fail the build instead of the severity input."
+    required: false
+    default: "false"
+  gate_scanners:
+    description: "Every scan type uploaded to this gate run, e.g. SG,TR,IAC. SG (this scan) is always included. Default: ACCUKNOX_GATE_SCANNERS, else SG."
+    required: false
+    default: ""
+  gate_wait:
+    description: "Wait for the gate verdict in this step. Set false when a later step or job waits (gate_only)."
+    required: false
+    default: "true"
+  gate_only:
+    description: "Do not scan; only wait for the verdict of the scans already uploaded to this gate run."
+    required: false
+    default: "false"
+  gate_cli_id:
+    description: "Gate run id. A UUID is used as is; other text (e.g. a matrix value) gives a run id of its own. Default: derived from the workflow run."
+    required: false
+    default: ""
+  gate_token:
+    description: "User token for the quality-gate API. Default: accuknox_token."
+    required: false
+    default: ""
+  gate_timeout:
+    description: "Seconds to wait for the gate verdict."
+    required: false
+    default: "300"
+  gate_on_timeout:
+    description: "fail or pass when the gate verdict does not arrive in time."
+    required: false
+    default: "fail"
   scanner_version:
     description: "aspm-scanner-cli GitHub release tag"
     required: false
-    default: "v0.15.1"
+    default: "v0.16.5"
+
+outputs:
+  cli_id:
+    description: "Quality gate run id used by this step. Pass it to a later gate_only step or job as gate_cli_id."
+    value: ${{ steps.sast.outputs.cli_id }}
+  gate_status:
+    description: "Gate verdict when this step waited: passed, warning, failed, error, timeout, unsupported or rejected."
+    value: ${{ steps.sast.outputs.gate_status }}
+  gate_json_file:
+    description: "Path to the quality gate response JSON when this step waited."
+    value: ${{ steps.sast.outputs.gate_json_file }}
 
 runs:
   using: "composite"
   steps:
     - name: Run AccuKnox SAST Scan
+      id: sast
       shell: bash
       env:
         SOFT_FAIL: ${{ inputs.soft_fail }}
@@ -84,6 +128,14 @@ runs:
         INPUT_CODEASSURE_API_BASE: ${{ inputs.codeassure_api_base }}
         INPUT_CODEASSURE_API_KEY: ${{ inputs.codeassure_api_key }}
         AISCAN_SEVERITY: ${{ inputs.aiscan_severity }}
+        QUALITY_GATE: ${{ inputs.quality_gate }}
+        GATE_SCANNERS: ${{ inputs.gate_scanners }}
+        GATE_WAIT: ${{ inputs.gate_wait }}
+        GATE_ONLY: ${{ inputs.gate_only }}
+        INPUT_GATE_CLI_ID: ${{ inputs.gate_cli_id }}
+        INPUT_GATE_TOKEN: ${{ inputs.gate_token }}
+        GATE_TIMEOUT: ${{ inputs.gate_timeout }}
+        GATE_ON_TIMEOUT: ${{ inputs.gate_on_timeout }}
         SCANNER_VERSION: ${{ inputs.scanner_version }}
       run: |
         set -euo pipefail
@@ -91,13 +143,26 @@ runs:
         trim() { local v="${1//[$'\t\r\n ']}"; echo "$v"; }
         is_true() { [ "$(trim "$1" | tr '[:upper:]' '[:lower:]')" = "true" ]; }
 
-        if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || [ -z "$ACCUKNOX_LABEL" ]; then
-          echo "::error::accuknox_endpoint, accuknox_token, and accuknox_label must be set."
+        GATE_ONLY_MODE=false
+        if is_true "$GATE_ONLY"; then
+          GATE_ONLY_MODE=true
+        fi
+
+        if [ -z "$ACCUKNOX_ENDPOINT" ] || [ -z "$ACCUKNOX_TOKEN" ] || { [ "$GATE_ONLY_MODE" = false ] && [ -z "$ACCUKNOX_LABEL" ]; }; then
+          if [ "$GATE_ONLY_MODE" = true ]; then
+            echo "::error::accuknox_endpoint and accuknox_token must be set."
+          else
+            echo "::error::accuknox_endpoint, accuknox_token, and accuknox_label must be set."
+          fi
+          case "${GITHUB_EVENT_NAME:-}" in
+            pull_request|pull_request_review|pull_request_review_comment)
+              echo "::error::Pull requests from forks and Dependabot do not receive repository secrets. Skip this step for them, or add the secrets as Dependabot secrets." ;;
+          esac
           exit 1
         fi
 
         SCANNER_VERSION="$(trim "$SCANNER_VERSION")"
-        SCANNER_VERSION="${SCANNER_VERSION:-v0.15.1}"
+        SCANNER_VERSION="${SCANNER_VERSION:-v0.16.5}"
         case "$(uname -s)-$(uname -m)" in
           Linux-x86_64|Linux-amd64) ASSET="accuknox-aspm-scanner-linux-amd64" ;;
           Darwin-arm64)             ASSET="accuknox-aspm-scanner-darwin-arm64" ;;
@@ -118,6 +183,111 @@ runs:
           -o "$SCANNER"
         chmod +x "$SCANNER"
 
+        # ---- quality gate setup -------------------------------------------------
+        # Every upload and poll of one gate run must use the same run id (cli_id). The CLI derives it
+        # from GITHUB_REPOSITORY, GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT unless ACCUKNOX_CLI_ID is set.
+        CLI_ID_PINNED=""
+        GATE_CLI_ID="$(trim "$INPUT_GATE_CLI_ID")"
+        if [ -n "$GATE_CLI_ID" ]; then
+          if [[ "$GATE_CLI_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            CLI_ID_PINNED="$GATE_CLI_ID"
+          else
+            # Any other text is a key: one run id per workflow run attempt and key (e.g. per matrix leg).
+            if ! command -v python3 >/dev/null 2>&1; then
+              echo "::error::gate_cli_id '${GATE_CLI_ID}' is not a UUID, and python3 is needed to derive one from it. Pass a UUID."
+              exit 1
+            fi
+            CLI_ID_PINNED="$(GATE_KEY="$GATE_CLI_ID" python3 -c '
+        import os, uuid
+        name = "|".join(("github-action", os.environ.get("GITHUB_REPOSITORY", ""), os.environ.get("GITHUB_RUN_ID", ""),
+                         os.environ.get("GITHUB_RUN_ATTEMPT", "1"), os.environ["GATE_KEY"]))
+        print(uuid.uuid5(uuid.UUID("6f1c5b4e-2a93-4d0e-9c4a-7b1e3f0d8a52"), name))
+        ')"
+            echo "Quality gate run id for key '${GATE_CLI_ID}': ${CLI_ID_PINNED}"
+          fi
+          export ACCUKNOX_CLI_ID="$CLI_ID_PINNED"
+        elif [ -n "${ACCUKNOX_CLI_ID:-}" ]; then
+          CLI_ID_PINNED="$ACCUKNOX_CLI_ID"   # set by the workflow for every AccuKnox step
+        fi
+
+        INPUT_GATE_TOKEN="$(trim "$INPUT_GATE_TOKEN")"
+        if [ -n "$INPUT_GATE_TOKEN" ]; then
+          export ACCUKNOX_GATE_TOKEN="$INPUT_GATE_TOKEN"
+        fi
+
+        GATE_ARGS=()
+        if is_true "$SOFT_FAIL"; then
+          GATE_ARGS+=(--softfail)
+        fi
+
+        RUN_ID_FROM_SCAN=""
+
+        # Waits for the verdict, sets the outputs and explains the outcomes the CLI cannot see.
+        wait_for_gate() {
+          local gate_json="$TOOL_DIR/quality-gate.json" gate_exit
+          rm -f "$gate_json"
+          echo "Waiting for the AccuKnox quality gate verdict (up to $(trim "$GATE_TIMEOUT")s)..."
+          set +e
+          "$SCANNER" gate \
+            --gate-timeout "$(trim "$GATE_TIMEOUT")" \
+            --gate-on-timeout "$(trim "$GATE_ON_TIMEOUT")" \
+            --gate-json-file "$gate_json" \
+            ${GATE_ARGS[@]+"${GATE_ARGS[@]}"}
+          gate_exit=$?
+          set -e
+
+          if [ ! -f "$gate_json" ]; then
+            return "$gate_exit"
+          fi
+          echo "gate_json_file=$gate_json" >> "$GITHUB_OUTPUT"
+          if ! command -v python3 >/dev/null 2>&1; then
+            echo "python3 not found; the cli_id and gate_status outputs are not set."
+            return "$gate_exit"
+          fi
+          GATE_JSON="$gate_json" CLI_ID_PINNED="$CLI_ID_PINNED" RUN_ID_FROM_SCAN="$RUN_ID_FROM_SCAN" python3 -c '
+        import json, os
+        doc = json.load(open(os.environ["GATE_JSON"], encoding="utf-8"))
+        state = doc.get("state") or "unknown"
+        resp = doc.get("response") or {}
+        status = (resp.get("status") if state == "resolved" else None) or state
+        cli_id = doc.get("cli_id")
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+            out.write("gate_status=" + status + "\n")
+            if cli_id and not os.environ.get("RUN_ID_FROM_SCAN"):
+                out.write("cli_id=" + cli_id + "\n")
+        if state == "resolved":
+            scope = str(resp.get("repository")) + ":" + str(resp.get("branch"))
+            results = resp.get("results") or {}
+            no_policy = ", ".join(n for n, r in results.items() if r.get("note") == "no_policy_matched")
+            not_gated = ", ".join(n for n, r in results.items() if r.get("note") == "bucket_not_gated")
+            title = "::warning title=AccuKnox quality gate::"
+            if no_policy:
+                print(title + "No quality-gate policy applies to " + scope + ", so " + no_policy + " passed without being checked. "
+                      "Policy scopes are case-sensitive repository:branch patterns; on pull requests the branch is the PR source branch.")
+            if not_gated:
+                print(title + "The policies that apply to " + scope + " do not gate " + not_gated + ", so it passed without being checked.")
+        elif state == "rejected" and not os.environ.get("ACCUKNOX_GATE_TOKEN"):
+            print("::error title=AccuKnox quality gate::The gate API did not accept accuknox_token. Set the gate_token input "
+                  "to an AccuKnox user token.")
+        elif state == "unsupported":
+            attempt = int(os.environ.get("GITHUB_RUN_ATTEMPT") or 1)
+            if attempt > 1 and not os.environ.get("CLI_ID_PINNED"):
+                print("::error title=AccuKnox quality gate::This is re-run attempt %d, which has its own gate run id, but the scans "
+                      "were uploaded under the id of an earlier attempt. Pass the scan step cli_id output (or a fixed UUID) as "
+                      "gate_cli_id, or re-run all jobs." % attempt)
+        ' || echo "Could not read the quality gate response; the gate_status output is not set."
+          return "$gate_exit"
+        }
+
+        if [ "$GATE_ONLY_MODE" = true ]; then
+          set +e
+          wait_for_gate
+          GATE_EXIT=$?
+          set -e
+          exit "$GATE_EXIT"
+        fi
+
+        # ---- scan -----------------------------------------------------------------
         echo "Installing local OpenGrep binary and rules (no container image)..."
         "$SCANNER" tool install --type sast
 
@@ -184,11 +354,53 @@ runs:
           SCAN_ARGS+=(--softfail)
         fi
 
+        GATED=false
+        WAIT=false
+        # The CLI also turns the gate on from ACCUKNOX_QUALITY_GATE, e.g. set workflow-wide for raw CLI steps.
+        ENV_GATE="$(trim "${ACCUKNOX_QUALITY_GATE:-}" | tr '[:upper:]' '[:lower:]')"
+        if is_true "$QUALITY_GATE" || [ "$ENV_GATE" = "true" ] || [ "$ENV_GATE" = "1" ] || [ "$ENV_GATE" = "yes" ]; then
+          GATED=true
+          GATE_SCANNERS="$(trim "$GATE_SCANNERS")"
+          GATE_SCANNERS="${GATE_SCANNERS:-$(trim "${ACCUKNOX_GATE_SCANNERS:-}")}"
+          GATE_SCANNERS="${GATE_SCANNERS:-SG}"
+          SCAN_ARGS+=(--quality-gate --gate-scanners "$GATE_SCANNERS")
+          if is_true "$GATE_WAIT"; then
+            WAIT=true
+            if [ "$GATE_SCANNERS" != "SG" ]; then
+              echo "::notice title=AccuKnox quality gate::This step waits for ${GATE_SCANNERS}. A scan type that is uploaded only after this step can never arrive in time; if any of them runs later, set gate_wait: false here and wait with gate_only in a final step."
+            fi
+          fi
+        fi
+
         echo "Running AccuKnox SAST scan with native OpenGrep..."
+        SCAN_LOG="$TOOL_DIR/scan.log"
+        set +e
         "$SCANNER" scan "${SCAN_ARGS[@]}" sast \
           --command "scan ." \
           --repo-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}.git" \
           --commit-sha "${GITHUB_SHA}" \
           --pipeline-id "$PIPELINE_ID" \
           --job-url "$JOB_URL" \
-          ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+          ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"} 2>&1 | tee "$SCAN_LOG"
+        SCAN_EXIT=${PIPESTATUS[0]}
+        set -e
+
+        if [ "$GATED" = true ]; then
+          # The CLI logs the run id it uploaded under; expose it so a later gate_only step/job can wait on it.
+          RUN_ID_FROM_SCAN="$(grep -oE 'Quality gate run id: [0-9a-fA-F-]{36}' "$SCAN_LOG" | tail -n 1 | awk '{print $NF}' || true)"
+          if [ -n "$RUN_ID_FROM_SCAN" ]; then
+            echo "cli_id=$RUN_ID_FROM_SCAN" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+        if [ "$SCAN_EXIT" -ne 0 ]; then
+          exit "$SCAN_EXIT"
+        fi
+
+        if [ "$WAIT" = true ]; then
+          set +e
+          wait_for_gate
+          GATE_EXIT=$?
+          set -e
+          exit "$GATE_EXIT"
+        fi
