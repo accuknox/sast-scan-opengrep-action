@@ -31,7 +31,7 @@ This performs an SAST scan on your repository and uploads the results to AccuKno
 | gate_wait | Wait for the verdict in this step. Set `false` when a later step or job waits with `gate_only` | No | `true` |
 | gate_only | Skip the scan and only wait for the verdict of scans already uploaded to the gate run. `accuknox_label` is not needed | No | `false` |
 | gate_cli_id | Gate run id. A UUID is used as is (share it across jobs); any other text, such as `${{ matrix.os }}`, gives a separate run id for this workflow run attempt. Empty = env `ACCUKNOX_CLI_ID`, else derived from the workflow run | No |  |
-| gate_token | User token for the quality-gate API. Empty = `accuknox_token` | No |  |
+| gate_token | AccuKnox user token for the quality-gate API. Needed whenever the step waits for the verdict: the gate API rejects the label upload token | With `quality_gate` or `gate_only` |  |
 | gate_timeout | Seconds to wait for the verdict | No | `300` |
 | gate_on_timeout | `fail` or `pass` when the verdict does not arrive in time | No | `fail` |
 | scanner_version | aspm-scanner-cli GitHub release tag | No | `v0.16.5` |
@@ -127,7 +127,7 @@ With `quality_gate: "true"` the scan no longer fails on `severity`. It uploads i
 | A `warn` policy is breached | passes, with a warning | `warning` |
 | A `block` policy is breached | fails (exit 1). With `soft_fail: "true"`, passes with a warning | `failed` |
 | A scan could not be evaluated (unparsable results, policy service down) | fails (exit 2), even with `soft_fail` | `error` |
-| No verdict within `gate_timeout` | fails (exit 2). With `gate_on_timeout: pass`, passes | `timeout` |
+| No verdict within `gate_timeout` | fails (exit 2). With `gate_on_timeout: pass`, passes with a warning | `timeout` |
 | The token is not accepted by the gate API | fails (exit 2) | `rejected` |
 | The run is unknown to AccuKnox | fails (exit 2) | `unsupported` |
 | The scan itself fails (scanner or AI analysis error, upload error) | fails without waiting for a verdict | not set |
@@ -145,7 +145,8 @@ With `quality_gate: "true"` the scan no longer fails on `severity`. It uploads i
   | `schedule`, `workflow_dispatch` | the branch the workflow ran on |
 
   To gate pull requests into `main`, scope the policy to every branch of the repository (`acme/web:*`), not to `acme/web:main`.
-- **Use a user token for the gate.** The gate API identifies a user, which a label upload token may not. If the step reports `rejected`, set `gate_token` to an AccuKnox user token.
+- **Set `gate_token` to an AccuKnox user token.** The gate API identifies a user, and it rejects the label upload token (`accuknox_token`) with HTTP 403 `rejected`. Uploads still use `accuknox_token`; only the wait for the verdict uses `gate_token`, so a step with `gate_wait: "false"` does not need it.
+- **Quality gates need a recent AccuKnox backend.** On a tenant without them the step fails with `unsupported` (exit 2) after the upload. Check with your AccuKnox contact before turning the gate on.
 - **`soft_fail` defaults to `true`**, which reports a failed policy without failing the build. Set `soft_fail: "false"` to block on it.
 - **Fork and Dependabot pull requests** do not receive repository secrets, so the step fails on the missing endpoint and token. Skip the step for them, for example with `if: github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')`.
 - **The first run for a tenant can be slow** while AccuKnox prepares reference data for a scan type. Raise `gate_timeout` if the first runs time out.

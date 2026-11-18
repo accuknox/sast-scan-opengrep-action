@@ -80,7 +80,7 @@ inputs:
     required: false
     default: ""
   gate_token:
-    description: "User token for the quality-gate API. Default: accuknox_token."
+    description: "AccuKnox user token for the quality-gate API. Needed whenever this step waits for the verdict: the gate API does not accept the label upload token (accuknox_token)."
     required: false
     default: ""
   gate_timeout:
@@ -226,6 +226,9 @@ runs:
         wait_for_gate() {
           local gate_json="$TOOL_DIR/quality-gate.json" gate_exit
           rm -f "$gate_json"
+          if [ -z "${ACCUKNOX_GATE_TOKEN:-}" ]; then
+            echo "::warning title=AccuKnox quality gate::gate_token is not set, so the gate is polled with accuknox_token. The gate API needs an AccuKnox user token and rejects the label upload token."
+          fi
           echo "Waiting for the AccuKnox quality gate verdict (up to $(trim "$GATE_TIMEOUT")s)..."
           set +e
           "$SCANNER" gate \
@@ -266,6 +269,9 @@ runs:
                       "Policy scopes are case-sensitive repository:branch patterns; on pull requests the branch is the PR source branch.")
             if not_gated:
                 print(title + "The policies that apply to " + scope + " do not gate " + not_gated + ", so it passed without being checked.")
+        elif state == "timeout" and doc.get("exit_code") == 0:
+            print("::warning title=AccuKnox quality gate::No verdict within gate_timeout; the step passes because gate_on_timeout "
+                  "is pass. The scan was not checked against the policy.")
         elif state == "rejected" and not os.environ.get("ACCUKNOX_GATE_TOKEN"):
             print("::error title=AccuKnox quality gate::The gate API did not accept accuknox_token. Set the gate_token input "
                   "to an AccuKnox user token.")
