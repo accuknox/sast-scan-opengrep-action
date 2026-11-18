@@ -183,6 +183,12 @@ runs:
           -o "$SCANNER"
         chmod +x "$SCANNER"
 
+        # The macOS scanner binary does not find the system CA store when it downloads tools
+        # (CERTIFICATE_VERIFY_FAILED on GitHub macOS runners); point it at the system bundle.
+        if [ "$(uname -s)" = "Darwin" ] && [ -z "${SSL_CERT_FILE:-}" ] && [ -f /etc/ssl/cert.pem ]; then
+          export SSL_CERT_FILE=/etc/ssl/cert.pem
+        fi
+
         # ---- quality gate setup -------------------------------------------------
         # Every upload and poll of one gate run must use the same run id (cli_id). The CLI derives it
         # from GITHUB_REPOSITORY, GITHUB_RUN_ID and GITHUB_RUN_ATTEMPT unless ACCUKNOX_CLI_ID is set.
